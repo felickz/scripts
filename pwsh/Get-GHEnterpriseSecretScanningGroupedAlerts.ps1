@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Get a list of secret scanning alerts grouped by secret type and secret value
+    Get a list of secret scanning alerts across the enterprise grouped by secret type and secret value
 .DESCRIPTION
 
-    This script will get a list of secret scanning alerts grouped by secret type and secret value.  This is useful for identifying secrets that are being used in multiple places in your organization.  This script will also mask the secret value in the output (first 4 chars are shown of secret).
+    This script will get a list of secret scanning alerts grouped by secret type and secret value.  This is useful for identifying secrets that are being used in multiple places in your enterprise.  This script will also mask the secret value in the output (first 4 chars are shown of secret).
 .PARAMETER apiKey
     The GitHub API key to use for authentication.  (sample uses gh cli to get token)
 .PARAMETER enterprise_name
