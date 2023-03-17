@@ -9,7 +9,7 @@
 .PARAMETER enterprise_name
     The name of the GitHub Enterprise instance to query.  (sample uses octodemo)
 .EXAMPLE
-    .\Get-SecretScanningGroupedAlerts.ps1 -apiKey $apiKey -enterprise_name $enterprise_name
+    .\Get-GHEnterpriseSecretScanningGroupedAlerts.ps1 -apiKey $apiKey -enterprise_name $enterprise_name
 #>
 
 param (
