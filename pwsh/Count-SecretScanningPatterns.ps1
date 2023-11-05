@@ -25,7 +25,7 @@ $Providers = $inventory | Select-Object -Property Provier -Unique
 $Push = $inventory | Where-Object { $_.HasPushProtection -eq $true }  | Measure-Object | Select-Object -Property Count
 $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measure-Object | Select-Object -Property Count
 
-Write-Host "Secret Scanning Inventory"
+Write-Host "Secret Scanning Inventory $(Get-Date -AsUTC)"
 Write-Host "Number of Secret Types: $($inventory.Count)"
 Write-Host "Number of Unique Providers: $($Providers.Count)"
 Write-Host "Number of Secret Types with Push Protection: $($Push.Count)"
