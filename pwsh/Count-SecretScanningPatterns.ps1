@@ -10,7 +10,7 @@ $data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
 $inventory = @()
 foreach ($node in $data) {
     $inventory += New-Object PSObject -Property @{
-        'Provier'           = $node.provider
+        'Provider'           = $node.provider
         'SecretType'        = $node.secretType
         'HasPushProtection' = $node.hasPushProtection
         #'OrigHasValidityCheck' = $node.hasValidityCheck
@@ -21,12 +21,13 @@ foreach ($node in $data) {
 
 #$inventory | Format-Table -AutoSize
 
-$Providers = $inventory | Select-Object -Property Provier -Unique
+$Providers = $inventory | Select-Object -Property Provider -Unique
 $Push = $inventory | Where-Object { $_.HasPushProtection -eq $true }  | Measure-Object | Select-Object -Property Count
 $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measure-Object | Select-Object -Property Count
 
-Write-Host "Secret Scanning Inventory $(Get-Date -AsUTC)"
+Write-Host "Secret Scanning Inventory  $($(Get-Date -AsUTC).ToString('u'))"
 Write-Host "Number of Secret Types: $($inventory.Count)"
 Write-Host "Number of Unique Providers: $($Providers.Count)"
 Write-Host "Number of Secret Types with Push Protection: $($Push.Count)"
 Write-Host "Number of Secret Types with Validity Check: $($Validity.Count)"
+Write-Host "See: [Inventory Commit History](https://github.com/github/docs/commits/main/data/secret-scanning.yml) and [Secret Scanning Changelog](https://github.blog/changelog/label/secret-scanning)"
