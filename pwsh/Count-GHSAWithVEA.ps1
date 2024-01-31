@@ -72,9 +72,10 @@ $results = foreach ($ecosystem in $ecosystems) {
 
     # Create a custom object with the ecosystem and count
     New-Object PSObject -Property @{
-        Ecosystem = $ecosystem
+        Ecosystem = "$ecosystem($advisoryEcosystem)"
         Count = $apiResponse.total_count
         TotalAdvisories = $totalAdvisories
+        Coverage = $totalAdvisories -is [int] ? "$([math]::Round(($apiResponse.total_count / $totalAdvisories) * 100, 2))%" : "N/A"
     }
 
     #Write-Host $ecosystemSearch
