@@ -4,6 +4,8 @@
 # - workflows named "CodeQl" running in an action - EXCLUDE PRs
 # - Report if the scans were building successful or not (conclusion)
 
+# Use this script to output a csv file to actions upload: https://github.com/vulna-felickz/.github/edit/main/.github/workflows/codeql-org-report.yml
+
 #results:
 # success - https://github.com/vulna-felickz/WebGoat.NET/actions/runs/8019411601 (WebGoat.NET)
 # success - https://github.com/vulna-felickz/WebGoat.NET-CORE/actions/runs/7963273004 (WebGoat.NET-CORE)
@@ -23,13 +25,20 @@
 # success - https://github.com/vulna-felickz/VulnerableApp/actions/runs/7954709690 (VulnerableApp)
 # success - https://github.com/vulna-felickz/demo-java/actions/runs/4263592915 (demo-java)
 
-$org = "vulna-felickz"; `
+$org = "vulna-felickz"
+$csv = "CodeQLWorkflowStatus.csv"
+$header = "Org,Repo,Conclusion,Workflow_Url"
+Set-Content -Path "./$csv" -Value $header
+
 gh api /orgs/$org/repos `
 | jq -r '.[] | .name' `
 | %{ `
     $name = $_; gh api /repos/$org/$_/actions/workflows `
     | jq '.workflows[] | select(.name=="CodeQL") | .id' `
     | % { gh api /repos/$org/$name/actions/workflows/$_/runs?exclude_pull_requests=true } `
-    | jq -r '.workflow_runs[0] | "\(.conclusion) - \(.html_url)"'`
-    | %{ "$_ ($name)" } `
+    | jq -r '.workflow_runs[0] | "\(.conclusion),\(.html_url)"'`
+    | %{ "$org,$name,$_" } `
+    | Add-Content -Path "./$csv"
 }
+
+Import-Csv -Path "./$csv" | Format-Table
