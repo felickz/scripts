@@ -75,4 +75,22 @@ gh api /orgs/$org/repos --paginate `
     | Add-Content -Path "./$csv" `
 }
 
-Import-Csv -Path "./$csv" | Format-Table
+
+#check if FormatMarkdownTable module is installed
+if (Get-Module -ListAvailable -Name FormatMarkdownTable -ErrorAction SilentlyContinue) {
+    Write-ActionDebug "FormatMarkdownTable module is installed"
+}
+else {
+    # Handle `Untrusted repository` prompt
+    Set-PSRepository PSGallery -InstallationPolicy Trusted
+    #directly to output here before module loaded to support Write-ActionInfo
+    Write-Output "FormatMarkdownTable module is not installed.  Installing from Gallery..."
+    Install-Module -Name FormatMarkdownTable
+}
+
+$markdownSummary = Import-Csv -Path "./$csv" | Format-MarkdownTableTableStyle -ShowMarkdown -DoNotCopyToClipboard -HideStandardOutput
+$markdownSummary > $env:GITHUB_STEP_SUMMARY
+
+if ($null -eq $env:GITHUB_ACTIONS) {
+    $markdownSummary
+}
