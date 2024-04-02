@@ -41,15 +41,15 @@ $ecosystems = @(
 )
 
  # #Loop over each ecosystem and build a search string
-$results = foreach ($ecosystem in $ecosystems) {    
+$results = foreach ($ecosystem in $ecosystems) {
     $ecosystemSearch = $search + " AND `"\`"ecosystem\`": \`"$ecosystem\`"`""
 
     #URI encode the search string
     $ecosystemSearch = [System.Uri]::EscapeDataString($ecosystemSearch) # Most similar to the JS encodeURIComponent() function
     #$search = [System.Web.HttpUtility]::UrlEncode($search) # Also encodes spaces as + instead of %20
-        
+
     #use the gh cli to call the search api https://docs.github.com/en/rest/search/search?apiVersion=2022-11-28
-    $apiResponse = gh api search/code?q=$ecosystemSearch | ConvertFrom-Json    
+    $apiResponse = gh api search/code?q=$ecosystemSearch | ConvertFrom-Json
 
     #Create $advisoryEcosystem variable to use a map to transform the ecosystem string to match the advisory database, ex "PyPi" to "pip", "Pub" to "pub"
     $advisoryMap = @{
@@ -68,11 +68,11 @@ $results = foreach ($ecosystem in $ecosystems) {
 
     $advisoryEcosystem = $advisoryMap[$ecosystem] ?? "other"
     # Would much rather use GraphQL here, but ecosystem is not exposed in the advisory database Objects https://docs.github.com/en/graphql/reference/objects#securityadvisory
-    $totalAdvisories = $advisoryEcosystem -eq "other" ? "x" : (gh api -X GET /advisories -F ecosystem=$advisoryEcosystem -F per_page=100 --paginate | ConvertFrom-Json).Count 
+    $totalAdvisories = $advisoryEcosystem -eq "other" ? "x" : (gh api -X GET /advisories -F ecosystem=$advisoryEcosystem -F per_page=100 --paginate | ConvertFrom-Json).Count
 
     # Create a custom object with the ecosystem and count
     New-Object PSObject -Property @{
-        Ecosystem = "$ecosystem($advisoryEcosystem)"
+        Ecosystem = "[$ecosystem($advisoryEcosystem)](https://github.com/search?q=$ecosystemSearch)"
         Count = $apiResponse.total_count
         TotalAdvisories = $totalAdvisories
         Coverage = $totalAdvisories -is [int] ? "$([math]::Round(($apiResponse.total_count / $totalAdvisories) * 100, 2))%" : "N/A"
@@ -80,11 +80,6 @@ $results = foreach ($ecosystem in $ecosystems) {
 
     #Write-Host $ecosystemSearch
 }
-
-Write-Host "Advisory DB VEA Inventory  $($(Get-Date -AsUTC).ToString('u'))"
-# Output the results as a table
-$results | Sort-Object -Property Count -Descending | ConvertTo-Markdown
-
 
 #https://www.powershellgallery.com/packages/PSMarkdown/1.1/Content/ConvertTo-Markdown.ps1
 Function ConvertTo-Markdown {
@@ -144,5 +139,13 @@ Function ConvertTo-Markdown {
         }
     }
 }
+
+
+
+
+
+Write-Host "Advisory DB VEA Inventory  $($(Get-Date -AsUTC).ToString('u'))"
+# Output the results as a table
+$results | Sort-Object -Property Count -Descending | ConvertTo-Markdown
 
 
