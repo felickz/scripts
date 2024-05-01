@@ -16,7 +16,7 @@ foreach ($node in $data) {
         #'OrigHasValidityCheck' = $node.hasValidityCheck
         'HasValidityCheck'  = $node.hasValidityCheck.ToString() -ne 'False'
     }
-    
+
 }
 
 #$inventory | Format-Table -AutoSize
@@ -30,4 +30,5 @@ Write-Host "Number of Secret Types: $($inventory.Count)"
 Write-Host "Number of Unique Providers: $($Providers.Count)"
 Write-Host "Number of Secret Types with Push Protection: $($Push.Count)"
 Write-Host "Number of Secret Types with Validity Check: $($Validity.Count)"
+Write-Host "Non-Partner Patterns: [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns)"
 Write-Host "See: [Inventory Commit History](https://github.com/github/docs/commits/main/data/secret-scanning.yml) and [Secret Scanning Changelog](https://github.blog/changelog/label/secret-scanning)"
