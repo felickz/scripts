@@ -3,8 +3,8 @@ if (-not (Get-Module -Name PowerShell-yaml -ListAvailable)) {
     Install-Module -Name PowerShell-yaml -Scope CurrentUser
 }
 
-# Read the YAML file from https://github.com/github/docs/blob/main/data/secret-scanning.yml
-$url = 'https://raw.githubusercontent.com/github/docs/main/data/secret-scanning.yml'
+# Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml
+$url = 'https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/public-docs.yml'
 $data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
 
 $inventory = @()
@@ -31,4 +31,4 @@ Write-Host "Number of Unique Providers: $($Providers.Count)"
 Write-Host "Number of Secret Types with Push Protection: $($Push.Count)"
 Write-Host "Number of Secret Types with Validity Check: $($Validity.Count)"
 Write-Host "Non-Partner Patterns: [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns)"
-Write-Host "See: [Inventory Commit History](https://github.com/github/docs/commits/main/data/secret-scanning.yml) and [Secret Scanning Changelog](https://github.blog/changelog/label/secret-scanning)"
+Write-Host "See: [Inventory Commit History](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml) and [Secret Scanning Changelog](https://github.blog/changelog/label/secret-scanning)"
