@@ -10,23 +10,24 @@ $data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
 $inventory = @()
 foreach ($node in $data) {
     $inventory += New-Object PSObject -Property @{
-        'Provider'           = $node.provider
+        'Provider'          = $node.provider
         'SecretType'        = $node.secretType
         'HasPushProtection' = $node.hasPushProtection
         #'OrigHasValidityCheck' = $node.hasValidityCheck
         'HasValidityCheck'  = $node.hasValidityCheck.ToString() -ne 'False'
+        'HasVariants'       = $node.isduplicate
     }
 
 }
 
 #$inventory | Format-Table -AutoSize
-
 $Providers = $inventory | Select-Object -Property Provider -Unique
 $Push = $inventory | Where-Object { $_.HasPushProtection -eq $true }  | Measure-Object | Select-Object -Property Count
 $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measure-Object | Select-Object -Property Count
+$Variants = $inventory | Where-Object { $_.HasVariants -eq $true }  | Measure-Object | Select-Object -Property Count
 
 Write-Host "Secret Scanning Inventory  $($(Get-Date -AsUTC).ToString('u'))"
-Write-Host "Number of Secret Types: $($inventory.Count)"
+Write-Host "Number of Secret Types: $($inventory.Count) ($($Variants.Count) with variants)"
 Write-Host "Number of Unique Providers: $($Providers.Count)"
 Write-Host "Number of Secret Types with Push Protection: $($Push.Count)"
 Write-Host "Number of Secret Types with Validity Check: $($Validity.Count)"
