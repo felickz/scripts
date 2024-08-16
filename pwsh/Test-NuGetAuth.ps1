@@ -77,7 +77,7 @@ foreach ($source in $sources) {
         $startTime = [System.Diagnostics.Stopwatch]::StartNew()
 
         #errors easier to catch in stderror
-        $process = Start-Process nuget -ArgumentList "search", $searchFor, "-Source", "$($source.Name)", "-NonInteractive" -NoNewWindow -RedirectStandardOutput "output.txt" -RedirectStandardError "error.txt" -PassThru
+        $process = Start-Process nuget -ArgumentList "search", $searchFor, "-Source", "`"$($source.Name)`", "-NonInteractive" -NoNewWindow -RedirectStandardOutput "output.txt" -RedirectStandardError "error.txt" -PassThru
         $process.WaitForExit()
 
         $elapsedTime = $startTime.ElapsedMilliseconds
