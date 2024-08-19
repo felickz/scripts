@@ -1,0 +1,1 @@
+MSBuild auto-detection: using msbuild version '17.10.4.21802' from 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\bin'.

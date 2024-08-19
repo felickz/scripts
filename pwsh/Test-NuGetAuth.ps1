@@ -21,7 +21,7 @@ $searchFor = [System.Guid]::NewGuid().ToString()
 
 # Loop through each source and print the name and URL
 foreach ($source in $sources) {
-    Write-Host "➕ Name: $($source.Name) / URL: $($source.URL)"
+    Write-Host "➕ dotnet package search - Name: $($source.Name) / URL: $($source.URL)"
 
     try {
         $startTime = [System.Diagnostics.Stopwatch]::StartNew()
@@ -68,7 +68,7 @@ for ($i = 0; $i -lt $lines.Length; $i++) {
 $searchFor = [System.Guid]::NewGuid().ToString()
 # Loop through each source and print the name and URL
 foreach ($source in $sources) {
-    Write-Host "➕ Name: $($source.Name) / URL: $($source.URL)"
+    Write-Host "➕ NuGet Search - Name: $($source.Name) / URL: $($source.URL)"
 
     # This list cannot be paged / filtered to one package
     #    $packages = nuget list -Source $($source.Name)
