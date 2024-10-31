@@ -1,3 +1,6 @@
+#Auth the GH cli via one of these mechanisms:
+# - gh auth refresh -h github.com -s admin:org
+# - $Env:GH_TOKEN = <PAT>
 $org = "octofelickz"
 
 Write-Host "Starting at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
@@ -5,8 +8,8 @@ Write-Host "Starting at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 # Ignore templates? .is_template == false
 gh api "/orgs/$org/repos" --paginate --jq '[ .[] | select(.archived == false and .disabled == false) | { name: .name } ] | .[].name ' |
 ForEach-Object {
-    #Ignore repos that are temporary private forks for security advisory vulnerablibility reporting (ex: <name>-ghsa-4xcm-h78r-r3ww)
-    if ($_ -notmatch "-ghsa-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}$") {
+    #Ignore repos that are temporary private forks for security advisory vulnerablibility reporting (ex: <reponame>-ghsa-<ghsa-id> )
+    if ($_ -notmatch "-ghsa(-[23456789cfghjmpqrvwx]{4}){3}$") {
         if ((gh api "/repos/$org/$_/actions/permissions" --jq '.enabled') -eq 'false') {
             gh api --method PUT "/repos/$org/$_/actions/permissions" -F "enabled=true" --silent
             Write-Host "Enabled Actions for '$org/$_'"
