@@ -26,10 +26,19 @@ $Push = $inventory | Where-Object { $_.HasPushProtection -eq $true }  | Measure-
 $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measure-Object | Select-Object -Property Count
 $Variants = $inventory | Where-Object { $_.HasVariants -eq $true }  | Measure-Object | Select-Object -Property Count
 
-Write-Host "Secret Scanning Inventory  $($(Get-Date -AsUTC).ToString('u'))"
-Write-Host "Number of Secret Types: $($inventory.Count) ($($Variants.Count) with variants)"
-Write-Host "Number of Unique Providers: $($Providers.Count)"
-Write-Host "Number of Secret Types with Push Protection: $($Push.Count)"
-Write-Host "Number of Secret Types with Validity Check: $($Validity.Count)"
-Write-Host "Non-Partner Patterns: [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns)"
-Write-Host "See: [Inventory Commit History](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml) and [Secret Scanning Changelog](https://github.blog/changelog/label/secret-scanning)"
+## Use the GH CLI api to post a new comment to the gist: https://gist.github.com/felickz/9688dd0f5182cab22386efecfa41eb74
+$comment = @"
+| Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
+| --- | --- |
+| Number of Secret Types | $($inventory.Count) ($($Variants.Count) with variants) |
+| Number of Unique Providers | $($Providers.Count) |
+| Number of Secret Types with Push Protection | $($Push.Count) |
+| Number of Secret Types with Validity Check | $($Validity.Count) |
+| Non-Partner Patterns | [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) |
+| Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml)
+| Secret Scanning Changelog | [Changelog](https://github.blog/changelog/label/secret-scanning) |
+"@
+
+Write-Host @comment
+
+gh api /gists/9688dd0f5182cab22386efecfa41eb74/comments -f "body=$comment"
