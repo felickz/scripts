@@ -1,3 +1,8 @@
+# Parameters
+param(
+    [switch]$SkipPost = $false
+)
+
 # Install the PowerShell-yaml module if not already installed
 if (-not (Get-Module -Name PowerShell-yaml -ListAvailable)) {
     Install-Module -Name PowerShell-yaml -Scope CurrentUser
@@ -63,7 +68,7 @@ function ConvertAndEvaluateFormula {
     return [bool]$result
 }
 
-# Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml
+# GitHub - Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml
 $url = 'https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/public-docs.yml'
 $data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
 
@@ -105,24 +110,105 @@ $GHESList | ForEach-Object {
 }
 
 
+# Azure DevOps - provider table parsing
+# Source: provider-table.md (markdown table => | Rule ID | Token Name | Push Protection | User Alerts | Validity Checking |)
+function ConvertFrom-AdoProviderMarkdown {
+    param(
+        [string]$Markdown
+    )
+    $results = @()
+    $lines = $Markdown -split "`n"
+    foreach ($raw in $lines) {
+        $line = $raw.Trim()
+        if (-not $line.StartsWith('|')) { continue }
+        if ($line -match '^\|\s*-+\s*\|') { continue } # separator
+
+        # Try provider (5-column) format first: RuleID | TokenName | Push | User | Validity
+        $matched = $false
+        if (-not $matched -and $line -match '^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*)\|\s*([^|]*)\|\s*([^|]*)\|$') {
+            $rule   = ($matches[1]).Trim()
+            $token  = ($matches[2]).Trim()
+            $push   = ($matches[3]).Trim()
+            $user   = ($matches[4]).Trim()
+            $valid  = ($matches[5]).Trim()
+            $matched = $true
+            $isNonProvider = $false
+        }
+        # Non-provider (4-column) format: RuleID | TokenName | User | Validity (no Push column)
+        if (-not $matched -and $line -match '^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*)\|\s*([^|]*)\|$') {
+            $rule   = ($matches[1]).Trim()
+            $token  = ($matches[2]).Trim()
+            $push   = ''  # absent
+            $user   = ($matches[3]).Trim()
+            $valid  = ($matches[4]).Trim()
+            $matched = $true
+            $isNonProvider = $true
+        }
+
+        if ($matched) {
+            if ($rule -eq 'Rule ID') { continue }
+            if (-not $rule) { continue }
+
+            $test = { param($v) if (-not $v) { return $false } return $v -match '(?i)green|checkmark|true|yes' }
+            $results += [pscustomobject]@{
+                RuleID           = $rule
+                TokenName        = $token
+                PushProtection   = $(if ($isNonProvider) { $false } else { & $test $push })
+                UserAlerts       = (& $test $user)
+                ValidityChecking = (& $test $valid)
+                IsNonProvider    = $isNonProvider
+            }
+        }
+    }
+    return $results
+}
+
+$ADOProviderTable = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/provider-table.md' | Out-String
+$ADOProviders = ConvertFrom-AdoProviderMarkdown -Markdown $ADOProviderTable
+$ADOProvidersPush = $ADOProviders | Where-Object { $_.PushProtection }
+$ADOProvidersValidity = $ADOProviders | Where-Object { $_.ValidityChecking }
+
+
+## NON PROVIDER ADO
+# - https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/non-provider-table.md
+$ADONonProviderTable = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/non-provider-table.md' | Out-String
+$ADONonProviders = ConvertFrom-AdoProviderMarkdown -Markdown $ADONonProviderTable
+$ADONonProvidersPush = $ADONonProviders | Where-Object { $_.PushProtection }
+$ADONonProvidersValidity = $ADONonProviders | Where-Object { $_.ValidityChecking }
+
+
 $comment = @"
-| Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
+# GitHub
+
+| GHAS Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
 | --- | --- |
-| Number of Secret Types | $($inventory.Count) ($($Variants.Count) with variants) |
-| Number of Unique Providers | $($Providers.Count) |
+| Number of Partner Secret Types | $($inventory.Count) ($($Variants.Count) with variants) |
+| Number of Unique Partner Providers | $($Providers.Count) |
 | Number of Secret Types with Push Protection | $($Push.Count) |
 | Number of Secret Types with Validity Check | $($Validity.Count) |
-| Non-Partner Patterns | [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) |
+| Non-Partner Patterns | [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
 | Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml)
 | Secret Scanning Changelog | [Changelog](https://github.blog/changelog/label/secret-scanning) |
 
 | GHES Version | Count |
 | --- | --- |
 $($GHESInventory | ForEach-Object { "| $($_.GHESVersion) | $($_.Count) |" } | Out-String)
+
+# Azure DevOps
+| GHAzDO Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
+| --- | --- |
+| Number of Partner Secret Types | [$($ADOProviders.Count)](https://learn.microsoft.com/en-us/azure/devops/repos/security/github-advanced-security-secret-scan-patterns?view=azure-devops#partner-provider-patterns) |
+| Number of Secret Types with Push Protection | $($ADOProvidersPush.Count + $ADONonProvidersPush.Count) |
+| Number of Secret Types with Validity Check | $($ADOProvidersValidity.Count + $ADONonProvidersValidity.Count) |
+| Non-Partner Patterns | [$($ADONonProviders.Count)](https://learn.microsoft.com/en-us/azure/devops/repos/security/github-advanced-security-secret-scan-patterns?view=azure-devops#non-provider-patterns) ( $($ADONonProvidersValidity.Count) with validity checks) |
+| Inventory Commit History | [Docs](https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/provider-table.md) [Docs NonPartner](https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/non-provider-table.md)
+| Secret Scanning Changes | [Commits](https://github.com/MicrosoftDocs/azure-devops-docs/commits/main/docs/repos/security/includes/provider-table.md) [Commits Non-Partner](https://github.com/MicrosoftDocs/azure-devops-docs/commits/main/docs/repos/security/includes/non-provider-table.md)|
 "@
 
-Write-Host @comment
+Write-Host $comment
 
 
 ## Use the GH CLI api to post a new comment to the gist: https://gist.github.com/felickz/9688dd0f5182cab22386efecfa41eb74
-gh api /gists/9688dd0f5182cab22386efecfa41eb74/comments -f "body=$comment"
+if (-not $SkipPost) {
+    gh api /gists/9688dd0f5182cab22386efecfa41eb74/comments -f "body=$comment"
+}
