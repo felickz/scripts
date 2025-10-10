@@ -11,17 +11,22 @@ $kev = (Invoke-WebRequest 'https://www.cisa.gov/sites/default/files/feeds/known_
 
 # Cross-reference and display matches
 $kevCves = $kev.vulnerabilities.cveID
-$matches = $cves | Where-Object { $kevCves -contains $_ }
+$kevMatches = $cves | Where-Object { $kevCves -contains $_ }
 
-if ($matches) {
-    Write-Host "`n⚠️  CRITICAL: Found $($matches.Count) Dependabot alert(s) in CISA KEV catalog:`n" -ForegroundColor Red
-    $matches | ForEach-Object {
-        $vuln = $kev.vulnerabilities | Where-Object { $_.cveID -eq $_ }
-        Write-Host "CVE: $($vuln.cveID)" -ForegroundColor Yellow
-        Write-Host "  Product: $($vuln.vendorProject) $($vuln.product)"
-        Write-Host "  Name: $($vuln.vulnerabilityName)"
-        Write-Host "  Due Date: $($vuln.dueDate)"
-        Write-Host "  Ransomware: $($vuln.knownRansomwareCampaignUse)`n"
+if ($kevMatches) {
+    Write-Host "`n⚠️  CRITICAL: Found $($kevMatches.Count) Dependabot alert(s) in CISA KEV catalog:`n" -ForegroundColor Red
+    $kevMatches | ForEach-Object {
+        $currentCve = $_.Trim()
+        $vuln = $kev.vulnerabilities | Where-Object { $_.cveID.Trim() -eq $currentCve }
+        if ($vuln) {
+            Write-Host "CVE: $($vuln.cveID)" -ForegroundColor Yellow
+            Write-Host "  Product: $($vuln.vendorProject) $($vuln.product)"
+            Write-Host "  Name: $($vuln.vulnerabilityName)"
+            Write-Host "  Due Date: $($vuln.dueDate)"
+            Write-Host "  Ransomware: $($vuln.knownRansomwareCampaignUse)`n"
+        } else {
+            Write-Host "CVE: $currentCve - NOT FOUND in KEV data" -ForegroundColor Magenta
+        }
     }
 } else {
     Write-Host "`n✓ No Dependabot alerts found in CISA KEV catalog" -ForegroundColor Green
