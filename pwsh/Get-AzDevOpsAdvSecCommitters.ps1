@@ -2,8 +2,8 @@
 # az logout
 
 
-# az devops login --org https://dev.azure.com/octodemo-felickz
-# az devops login --org https://dev.azure.com/octodemo-msft --subscription (see password manager)
+# az devops login --org https://dev.azure.com/<org>
+# az devops login --org https://dev.azure.com/<org> --subscription <subscription-id>
 
 
 # $azureDevopsResourceId = "499b84ac-1321-427f-aa17-267ca6975798"
@@ -16,29 +16,29 @@ $headers = @{     Authorization = "Basic $authValue"; }
 $organization = "octodemo-msft"
 $pipelineRunUrl = "https://dev.azure.com/$organization/_apis/projects"
 Write-Output "Projects in $organization :"
-Invoke-RestMethod -Uri $pipelineRunUrl -Method GET -Headers $headers -ContentType 'application/json' 
+Invoke-RestMethod -Uri $pipelineRunUrl -Method GET -Headers $headers -ContentType 'application/json'
 
 
 Write-Output "Org Potential Pushers in $organization :"
 $orgPotentialPushers = "https://advsec.dev.azure.com/$organization/_apis/management/meterUsageEstimate/details?api-version=7.2-preview.1"
-Invoke-RestMethod -Uri $orgPotentialPushers -Method GET -Headers $headers -ContentType 'application/json'  
+Invoke-RestMethod -Uri $orgPotentialPushers -Method GET -Headers $headers -ContentType 'application/json'
 
 Write-Output "Org Pushers in $organization :"
 $orgPushers = "https://advsec.dev.azure.com/$organization/_apis/management/meterUsageEstimate/default?api-version=7.2-preview.1"
-Invoke-RestMethod -Uri $orgPushers -Method GET -Headers $headers -ContentType 'application/json' 
+Invoke-RestMethod -Uri $orgPushers -Method GET -Headers $headers -ContentType 'application/json'
 
 
 $yesterday = (Get-Date).AddDays(-3).ToString("yyyy-MM-dd")
 #$yesterday = "2025-01-28"
 $orgMeterUsageUrl = "https://advsec.dev.azure.com/$organization/_apis/management/meterusage/default?billingDate=$yesterday&api-version=7.2-preview.1"
 $orgMeterUsageUrlToday = "https://advsec.dev.azure.com/$organization/_apis/management/meterusage/default?api-version=7.2-preview.1"
-$orgMeterUsage = Invoke-RestMethod -Uri $orgMeterUsageUrl -Method GET -Headers $headers -ContentType 'application/json' 
+$orgMeterUsage = Invoke-RestMethod -Uri $orgMeterUsageUrl -Method GET -Headers $headers -ContentType 'application/json'
 
 
 Write-Output "Meter Usage Billed Users in $organization :"
 # loop through billedUsers and output the userIdentiy converted to JSON - loop through each uniqueName and output as csv printed to output
 $orgMeterUsage.billedUsers | ForEach-Object {
-    Write-Output $_.userIdentity.uniqueName    
+    Write-Output $_.userIdentity.uniqueName
 }
 
 
