@@ -177,16 +177,72 @@ $ADONonProvidersPush = $ADONonProviders | Where-Object { $_.PushProtection }
 $ADONonProvidersValidity = $ADONonProviders | Where-Object { $_.ValidityChecking }
 
 
+## GITHUB NON PROVIDER PATTERNS
+# - https://raw.githubusercontent.com/github/docs/refs/heads/main/content/code-security/secret-scanning/introduction/supported-secret-scanning-patterns.md
+$GHNonProviderMarkdown = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/github/docs/refs/heads/main/content/code-security/secret-scanning/introduction/supported-secret-scanning-patterns.md' | Out-String
+
+# Parse the markdown to extract non-provider patterns
+$GHNonProviderPatterns = @()
+$GHCopilotPatterns = @()
+$inNonProviderSection = $false
+$inCopilotSection = $false
+$lines = $GHNonProviderMarkdown -split "`n"
+
+foreach ($line in $lines) {
+    $trimmedLine = $line.Trim()
+
+    # Detect the start of the Non-provider patterns section
+    if ($trimmedLine -match '^###\s+Non-provider patterns') {
+        $inNonProviderSection = $true
+        $inCopilotSection = $false
+        continue
+    }
+
+    # Detect the start of the Copilot secret scanning section
+    if ($trimmedLine -match '^###\s+.*copilot.*secret.*scanning' -or $trimmedLine -match '^\{\%\s*data variables\.secret-scanning\.copilot-secret-scanning') {
+        $inCopilotSection = $true
+        $inNonProviderSection = $false
+        continue
+    }
+
+    # Exit when we hit the next main section (not Copilot after Non-provider)
+    if (($inNonProviderSection -or $inCopilotSection) -and $trimmedLine -match '^###\s+' -and $trimmedLine -notmatch 'copilot') {
+        $inNonProviderSection = $false
+        $inCopilotSection = $false
+    }
+
+    # Parse table rows in the non-provider section
+    if ($inNonProviderSection -and $trimmedLine -match '^\|\s*Generic\s*\|\s*([^|]+?)\s*\|') {
+        $tokenName = $matches[1].Trim()
+        if ($tokenName -and $tokenName -ne 'Token') {
+            $GHNonProviderPatterns += $tokenName
+        }
+    }
+
+    # Parse table rows in the Copilot section
+    if ($inCopilotSection -and $trimmedLine -match '^\|\s*Generic\s*\|\s*([^|]+?)\s*\|') {
+        $tokenName = $matches[1].Trim()
+        if ($tokenName -and $tokenName -ne 'Token') {
+            $GHCopilotPatterns += $tokenName
+        }
+    }
+}
+
+$GHNonProviderCount = $GHNonProviderPatterns.Count
+$GHCopilotCount = $GHCopilotPatterns.Count
+
+
 $comment = @"
 # GitHub
 
-| GHAS Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
+| Secret Protection Inventory |$($(Get-Date -AsUTC).ToString('u')) |
 | --- | --- |
 | Number of Partner Secret Types | $($inventory.Count) ($($Variants.Count) with variants) |
 | Number of Unique Partner Providers | $($Providers.Count) |
 | Number of Secret Types with Push Protection | $($Push.Count) |
 | Number of Secret Types with Validity Check | $($Validity.Count) |
-| Non-Partner Patterns | [8](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
+| Non-Partner Patterns | [$($GHNonProviderCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
+| Copilot Secret Scanning Patterns | [$($GHCopilotCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#copilot-secret-scanning) |
 | Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml)
 | Secret Scanning Changelog | [Changelog](https://github.blog/changelog/label/secret-scanning) |
 
@@ -195,12 +251,13 @@ $comment = @"
 $($GHESInventory | ForEach-Object { "| $($_.GHESVersion) | $($_.Count) |" } | Out-String)
 
 # Azure DevOps
-| GHAzDO Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
+| Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
 | --- | --- |
 | Number of Partner Secret Types | [$($ADOProviders.Count)](https://learn.microsoft.com/en-us/azure/devops/repos/security/github-advanced-security-secret-scan-patterns?view=azure-devops#partner-provider-patterns) |
 | Number of Secret Types with Push Protection | $($ADOProvidersPush.Count + $ADONonProvidersPush.Count) |
 | Number of Secret Types with Validity Check | $($ADOProvidersValidity.Count + $ADONonProvidersValidity.Count) |
 | Non-Partner Patterns | [$($ADONonProviders.Count)](https://learn.microsoft.com/en-us/azure/devops/repos/security/github-advanced-security-secret-scan-patterns?view=azure-devops#non-provider-patterns) ( $($ADONonProvidersValidity.Count) with validity checks) |
+| Copilot Secret Scanning Patterns | 0 |
 | Inventory Commit History | [Docs](https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/provider-table.md) [Docs NonPartner](https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/non-provider-table.md)
 | Secret Scanning Changes | [Commits](https://github.com/MicrosoftDocs/azure-devops-docs/commits/main/docs/repos/security/includes/provider-table.md) [Commits Non-Partner](https://github.com/MicrosoftDocs/azure-devops-docs/commits/main/docs/repos/security/includes/non-provider-table.md)|
 "@
