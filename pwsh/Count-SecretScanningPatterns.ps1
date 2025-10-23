@@ -244,7 +244,7 @@ $comment = @"
 | Non-Partner Patterns | [$($GHNonProviderCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
 | Copilot Secret Scanning Patterns | [$($GHCopilotCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#copilot-secret-scanning) |
 | Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml)
-| Secret Scanning Changelog | [Changelog](https://github.blog/changelog/label/secret-scanning) |
+| Secret Scanning Changelog | [Changelog](https://github.blog/changelog/?label=application-security) |
 
 | GHES Version | Count |
 | --- | --- |
