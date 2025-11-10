@@ -81,6 +81,7 @@ foreach ($node in $data) {
         #'OrigHasValidityCheck' = $node.hasValidityCheck
         'HasValidityCheck'  = $node.hasValidityCheck.ToString() -ne 'False'
         'HasVariants'       = $node.isduplicate
+        'Base64Supported'   = $node.base64Supported
         'Versions' = $node.versions
     }
 
@@ -91,6 +92,7 @@ $Providers = $inventory | Select-Object -Property Provider -Unique
 $Push = $inventory | Where-Object { $_.HasPushProtection -eq $true }  | Measure-Object | Select-Object -Property Count
 $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measure-Object | Select-Object -Property Count
 $Variants = $inventory | Where-Object { $_.HasVariants -eq $true }  | Measure-Object | Select-Object -Property Count
+$Base64Supported = $inventory | Where-Object { $_.Base64Supported -eq $true }  | Measure-Object | Select-Object -Property Count
 
 # Find current GHES by splitting $inventory.Versions['ghes'] on '.' and finding the largest minor version (on [1])
 $currentGHES = "3.$($inventory | ForEach-Object { $_.Versions["ghes"] -split '\.' | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1 } | Sort-Object { [int]$_ } -Descending | Select-Object -First 1)"
@@ -241,14 +243,21 @@ $comment = @"
 | Number of Unique Partner Providers | $($Providers.Count) |
 | Number of Secret Types with Push Protection | $($Push.Count) |
 | Number of Secret Types with Validity Check | $($Validity.Count) |
+| Number of Secret Types with Base64 Support | $($Base64Supported.Count) |
 | Non-Partner Patterns | [$($GHNonProviderCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
 | Copilot Secret Scanning Patterns | [$($GHCopilotCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#copilot-secret-scanning) |
 | Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml)
 | Secret Scanning Changelog | [Changelog](https://github.blog/changelog/?label=application-security) |
 
+<details><summary>GHES Versions / Count</summary>
+<p>
+
 | GHES Version | Count |
 | --- | --- |
 $($GHESInventory | ForEach-Object { "| $($_.GHESVersion) | $($_.Count) |" } | Out-String)
+
+</p>
+</details>
 
 # Azure DevOps
 | Secret Scanning Inventory |$($(Get-Date -AsUTC).ToString('u')) |
