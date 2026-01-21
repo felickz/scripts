@@ -3,74 +3,23 @@ param(
     [switch]$SkipPost = $false
 )
 
+# Track errors globally
+$script:hasErrors = $false
+
 # Install the PowerShell-yaml module if not already installed
 if (-not (Get-Module -Name PowerShell-yaml -ListAvailable)) {
     Install-Module -Name PowerShell-yaml -Scope CurrentUser
 }
 
-# Ex: 3.15 > 3.5
-function Compare-Version {
-    param (
-        [string]$leftVersion,
-        [string]$rightVersion
-    )
-
-    $leftParts = $leftVersion -split '\.'
-    $rightParts = $rightVersion -split '\.'
-
-    for ($i = 0; $i -lt [math]::Max($leftParts.Length, $rightParts.Length); $i++) {
-        $leftPart = if ($i -lt $leftParts.Length) { [int]$leftParts[$i] } else { 0 }
-        $rightPart = if ($i -lt $rightParts.Length) { [int]$rightParts[$i] } else { 0 }
-
-        if ($leftPart -gt $rightPart) { return 1 }
-        if ($leftPart -lt $rightPart) { return -1 }
-    }
-
-    return 0
+# GitHub - Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml
+$url = 'https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml'
+try {
+    $data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
+} catch {
+    Write-Error "Failed to fetch GitHub GHEC data from $url : $_"
+    $script:hasErrors = $true
+    $data = @()
 }
-
-
-function ConvertAndEvaluateFormula {
-    param (
-        [string]$formula
-    )
-
-    # if formula contains "*", return true
-    if ($formula -match '\*') { return $true }
-
-    # Convert from standard comparison operators to PowerShell equivalents
-    $convertedFormula = $formula -replace '>=', '-ge'
-    $convertedFormula = $convertedFormula -replace '<=', '-le'
-    $convertedFormula = $convertedFormula -replace '>', '-gt'
-    $convertedFormula = $convertedFormula -replace '<', '-lt'
-    $convertedFormula = $convertedFormula -replace '==', '-eq'
-    $convertedFormula = $convertedFormula -replace '!=', '-ne'
-
-    # Evaluate the formula safely
-    $result = $false
-    if ($convertedFormula -match '(.+?)\s*(-ge|-le|-gt|-lt|-eq|-ne)\s*(.+)') {
-        $leftOperand = $matches[1]
-        $operator = $matches[2]
-        $rightOperand = $matches[3]
-
-        switch ($operator) {
-            '-ge' { $result = (Compare-Version $leftOperand $rightOperand) -ge 0 }
-            '-le' { $result = (Compare-Version $leftOperand $rightOperand) -le 0 }
-            '-gt' { $result = (Compare-Version $leftOperand $rightOperand) -gt 0 }
-            '-lt' { $result = (Compare-Version $leftOperand $rightOperand) -lt 0 }
-            '-eq' { $result = (Compare-Version $leftOperand $rightOperand) -eq 0 }
-            '-ne' { $result = (Compare-Version $leftOperand $rightOperand) -ne 0 }
-        }
-
-    }
-
-    # Return the result as a boolean
-    return [bool]$result
-}
-
-# GitHub - Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml
-$url = 'https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/public-docs.yml'
-$data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
 
 $inventory = @()
 foreach ($node in $data) {
@@ -78,13 +27,10 @@ foreach ($node in $data) {
         'Provider'          = $node.provider
         'SecretType'        = $node.secretType
         'HasPushProtection' = $node.hasPushProtection
-        #'OrigHasValidityCheck' = $node.hasValidityCheck
         'HasValidityCheck'  = $node.hasValidityCheck.ToString() -ne 'False'
         'HasVariants'       = $node.isduplicate
         'Base64Supported'   = $node.base64Supported
-        'Versions' = $node.versions
     }
-
 }
 
 #$inventory | Format-Table -AutoSize
@@ -94,21 +40,27 @@ $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measu
 $Variants = $inventory | Where-Object { $_.HasVariants -eq $true }  | Measure-Object | Select-Object -Property Count
 $Base64Supported = $inventory | Where-Object { $_.Base64Supported -eq $true }  | Measure-Object | Select-Object -Property Count
 
-# Find current GHES by splitting $inventory.Versions['ghes'] on '.' and finding the largest minor version (on [1])
-$currentGHES = "3.$($inventory | ForEach-Object { $_.Versions["ghes"] -split '\.' | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1 } | Sort-Object { [int]$_ } -Descending | Select-Object -First 1)"
-# build a list of ghes strings that are 3.4 and greater and ends with currentGHES
-$GHESList = 4 .. ($currentGHES -split '\.')[1]
-$GHESMajorVer = ($currentGHES -split '\.')[0]
-
-# $inventory[0].Versions["ghes"] is in format ">=3.5" ... use that formula to compare with $currentGHES
+# Get GHES versions from the pattern-docs folder structure
 $GHESInventory = @()
-$GHESList | ForEach-Object {
-    $GHESMinorVer = "$_"
-    $count = $inventory | Where-Object { ConvertAndEvaluateFormula -formula "$GHESMajorVer.$GHESMinorVer$($_.Versions['ghes'])" } | Measure-Object | Select-Object -Property Count
-    $GHESInventory += New-Object PSObject -Property @{
-        'GHESVersion' = "$GHESMajorVer.$GHESMinorVer"
-        'Count'       = $count.Count
+try {
+    $ghesVersionsResponse = gh api /repos/github/docs/contents/src/secret-scanning/data/pattern-docs --jq '.[].name' 2>&1
+    $ghesVersions = $ghesVersionsResponse | Where-Object { $_ -match '^ghes-\d+\.\d+$' } | ForEach-Object { $_ -replace 'ghes-', '' } | Sort-Object { [version]$_ }
+    
+    foreach ($ghesVer in $ghesVersions) {
+        $ghesUrl = "https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghes-$ghesVer/public-docs.yml"
+        try {
+            $ghesData = Invoke-RestMethod -Uri $ghesUrl | ConvertFrom-Yaml
+            $GHESInventory += New-Object PSObject -Property @{
+                'GHESVersion' = $ghesVer
+                'Count'       = $ghesData.Count
+            }
+        } catch {
+            Write-Warning "Failed to fetch GHES $ghesVer data: $_"
+        }
     }
+} catch {
+    Write-Error "Failed to get GHES versions list: $_"
+    $script:hasErrors = $true
 }
 
 
@@ -180,58 +132,70 @@ $ADONonProvidersValidity = $ADONonProviders | Where-Object { $_.ValidityChecking
 
 
 ## GITHUB NON PROVIDER PATTERNS
-# - https://raw.githubusercontent.com/github/docs/refs/heads/main/content/code-security/secret-scanning/introduction/supported-secret-scanning-patterns.md
-$GHNonProviderMarkdown = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/github/docs/refs/heads/main/content/code-security/secret-scanning/introduction/supported-secret-scanning-patterns.md' | Out-String
+# - https://raw.githubusercontent.com/github/docs/refs/heads/main/content/code-security/reference/secret-security/supported-secret-scanning-patterns.md
+$GHNonProviderMarkdown = $null
+try {
+    $GHNonProviderMarkdown = Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/github/docs/refs/heads/main/content/code-security/reference/secret-security/supported-secret-scanning-patterns.md' | Out-String
+} catch {
+    Write-Error "Failed to fetch GitHub non-provider patterns markdown: $_"
+    $script:hasErrors = $true
+}
 
 # Parse the markdown to extract non-provider patterns
 $GHNonProviderPatterns = @()
 $GHCopilotPatterns = @()
-$inNonProviderSection = $false
-$inCopilotSection = $false
-$lines = $GHNonProviderMarkdown -split "`n"
 
-foreach ($line in $lines) {
-    $trimmedLine = $line.Trim()
+if ($GHNonProviderMarkdown) {
+    $inNonProviderSection = $false
+    $inCopilotSection = $false
+    $lines = $GHNonProviderMarkdown -split "`n"
 
-    # Detect the start of the Non-provider patterns section
-    if ($trimmedLine -match '^###\s+Non-provider patterns') {
-        $inNonProviderSection = $true
-        $inCopilotSection = $false
-        continue
-    }
+    foreach ($line in $lines) {
+        $trimmedLine = $line.Trim()
 
-    # Detect the start of the Copilot secret scanning section
-    if ($trimmedLine -match '^###\s+.*copilot.*secret.*scanning' -or $trimmedLine -match '^\{\%\s*data variables\.secret-scanning\.copilot-secret-scanning') {
-        $inCopilotSection = $true
-        $inNonProviderSection = $false
-        continue
-    }
-
-    # Exit when we hit the next main section (not Copilot after Non-provider)
-    if (($inNonProviderSection -or $inCopilotSection) -and $trimmedLine -match '^###\s+' -and $trimmedLine -notmatch 'copilot') {
-        $inNonProviderSection = $false
-        $inCopilotSection = $false
-    }
-
-    # Parse table rows in the non-provider section
-    if ($inNonProviderSection -and $trimmedLine -match '^\|\s*Generic\s*\|\s*([^|]+?)\s*\|') {
-        $tokenName = $matches[1].Trim()
-        if ($tokenName -and $tokenName -ne 'Token') {
-            $GHNonProviderPatterns += $tokenName
+        # Detect the start of the Non-provider patterns section
+        if ($trimmedLine -match '^###\s+Non-provider patterns') {
+            $inNonProviderSection = $true
+            $inCopilotSection = $false
+            continue
         }
-    }
 
-    # Parse table rows in the Copilot section
-    if ($inCopilotSection -and $trimmedLine -match '^\|\s*Generic\s*\|\s*([^|]+?)\s*\|') {
-        $tokenName = $matches[1].Trim()
-        if ($tokenName -and $tokenName -ne 'Token') {
-            $GHCopilotPatterns += $tokenName
+        # Detect the start of the Copilot secret scanning section (using data variable reference)
+        if ($trimmedLine -match '^\{\%\s*data variables\.secret-scanning\.copilot-secret-scanning' -or $trimmedLine -match '^###.*copilot.*secret.*scanning') {
+            $inCopilotSection = $true
+            $inNonProviderSection = $false
+            continue
+        }
+
+        # Exit when we hit the next main section
+        if (($inNonProviderSection -or $inCopilotSection) -and $trimmedLine -match '^###\s+' -and $trimmedLine -notmatch 'copilot') {
+            $inNonProviderSection = $false
+            $inCopilotSection = $false
+        }
+
+        # Parse table rows in the non-provider section
+        if ($inNonProviderSection -and $trimmedLine -match '^\|\s*Generic\s*\|\s*([^|]+?)\s*\|') {
+            $tokenName = $matches[1].Trim()
+            if ($tokenName -and $tokenName -ne 'Token') {
+                $GHNonProviderPatterns += $tokenName
+            }
+        }
+
+        # Parse table rows in the Copilot section
+        if ($inCopilotSection -and $trimmedLine -match '^\|\s*(Generic)?\s*\|\s*([^|]+?)\s*\|') {
+            $tokenName = $matches[2].Trim()
+            if ($tokenName -and $tokenName -ne 'Token' -and $tokenName -ne 'Provider') {
+                $GHCopilotPatterns += $tokenName
+            }
         }
     }
 }
 
-$GHNonProviderCount = $GHNonProviderPatterns.Count
-$GHCopilotCount = $GHCopilotPatterns.Count
+# Use unique counts because the markdown contains separate tables for GHEC and GHES with the same patterns listed.
+# This is NOT the same as "variants" (multiple versions of the same pattern format) - those are tracked separately
+# in the main inventory. Here we're just deduplicating patterns that appear in both platform-specific tables.
+$GHNonProviderCount = ($GHNonProviderPatterns | Select-Object -Unique).Count
+$GHCopilotCount = ($GHCopilotPatterns | Select-Object -Unique).Count
 
 
 $comment = @"
@@ -246,7 +210,7 @@ $comment = @"
 | Number of Secret Types with Base64 Support | $($Base64Supported.Count) |
 | Non-Partner Patterns | [$($GHNonProviderCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
 | Copilot Secret Scanning Patterns | [$($GHCopilotCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#copilot-secret-scanning) |
-| Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/public-docs.yml)
+| Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml)
 | Secret Scanning Changelog | [Changelog](https://github.blog/changelog/?label=application-security) |
 
 <details><summary>GHES Versions / Count</summary>
@@ -276,5 +240,9 @@ Write-Host $comment
 
 ## Use the GH CLI api to post a new comment to the gist: https://gist.github.com/felickz/9688dd0f5182cab22386efecfa41eb74
 if (-not $SkipPost) {
+    if ($script:hasErrors) {
+        Write-Error "Skipping gist upload due to errors encountered during data collection."
+        exit 1
+    }
     gh api /gists/9688dd0f5182cab22386efecfa41eb74/comments -f "body=$comment"
 }
