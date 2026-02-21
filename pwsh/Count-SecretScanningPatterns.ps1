@@ -45,7 +45,7 @@ $GHESInventory = @()
 try {
     $ghesVersionsResponse = gh api /repos/github/docs/contents/src/secret-scanning/data/pattern-docs --jq '.[].name' 2>&1
     $ghesVersions = $ghesVersionsResponse | Where-Object { $_ -match '^ghes-\d+\.\d+$' } | ForEach-Object { $_ -replace 'ghes-', '' } | Sort-Object { [version]$_ }
-    
+
     foreach ($ghesVer in $ghesVersions) {
         $ghesUrl = "https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghes-$ghesVer/public-docs.yml"
         try {
