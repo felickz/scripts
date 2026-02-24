@@ -15,33 +15,57 @@
     Three modes of operation:
     - OrgApply:    Creates/updates org-level property schemas from the full AppInspector tag catalog
     - OrgCleanup:  Removes all AppInspector-* properties from the org
+    - OrgList:     Lists all AppInspector-* property schemas defined on the org
     - RepoAssign:  Analyzes a repo's source code and assigns detected tags as property values
+    - RepoList:    Lists the AppInspector property values currently assigned to a repo
 
 .PARAMETER Mode
-    Operation mode: OrgApply (default), OrgCleanup, or RepoAssign.
+    Operation mode: OrgApply (default), OrgCleanup, OrgList, RepoAssign, or RepoList.
+
+.PARAMETER Org
+    GitHub organization name (e.g., "octofelickz").
+    Required for OrgApply/OrgCleanup. For RepoAssign, inferred from -RepoNWO or -Org/-Repo.
+
+.PARAMETER Repo
+    (RepoAssign mode) Repository name (e.g., "juice-shop"). Used with -Org to form owner/repo.
+    Alternative to -RepoNWO. If both -RepoNWO and -Org/-Repo are provided, -RepoNWO takes precedence.
 
 .PARAMETER RepoNWO
     (RepoAssign mode) Target repository in name-with-owner format (e.g., "octofelickz/juice-shop").
+    Alternative to -Org/-Repo.
 
 .PARAMETER AnalyzeOutput
     (RepoAssign mode) Path to an AppInspector analyze JSON output file.
-    Generate with: appinspector analyze -s <source> -f json -o results.json --no-show-progress -g "**/node_modules/**"
+    See recommended analyze command in the RepoAssign mode section of this script.
+    Quick start: appinspector analyze --source-path <source> --output-file-format json --output-file-path results.json --no-show-progress --tags-only --no-file-metadata --context-lines -1 --disable-archive-crawling --exclusion-globs "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/*.min.js" --file-timeout 15000 --confidence-filters "High"
     See: https://github.com/microsoft/ApplicationInspector/wiki/1.-CLI-Usage
 
 .EXAMPLE
     # Create/update all AppInspector custom properties on the org
-    .\Publish-AppInspectorCustomProperties.ps1 -Mode OrgApply
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode OrgApply -Org "octofelickz"
 
 .EXAMPLE
     # Remove all AppInspector-* custom properties from the org
-    .\Publish-AppInspectorCustomProperties.ps1 -Mode OrgCleanup
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode OrgCleanup -Org "octofelickz"
+
+.EXAMPLE
+    # List all AppInspector-* property schemas on the org
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode OrgList -Org "octofelickz"
 
 .EXAMPLE
     # Analyze a repo's source and assign detected tags as property values
-    # Step 1: Run appinspector analyze (with exclusions for large dirs like node_modules)
-    #   appinspector analyze -s "C:\repos\octofelickz\juice-shop-felickz" -f json -o .\juice-shop-results.json --no-show-progress -g "**/node_modules/**"
-    # Step 2: Assign the results to the repo
+    # Step 1: Run appinspector analyze (see RepoAssign section in script for full recommended flags)
+    #   appinspector analyze --source-path "C:\repos\octofelickz\juice-shop-felickz" --output-file-format json --output-file-path .\juice-shop-results.json --no-show-progress --tags-only --no-file-metadata --context-lines -1 --disable-archive-crawling --exclusion-globs "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/*.min.js" --file-timeout 15000 --confidence-filters "High"
+    # Step 2: Assign the results to the repo (using -RepoNWO)
     .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -RepoNWO "octofelickz/juice-shop" -AnalyzeOutput ".\juice-shop-results.json"
+
+.EXAMPLE
+    # Same as above but using -Org and -Repo instead of -RepoNWO
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -Org "octofelickz" -Repo "juice-shop" -AnalyzeOutput ".\juice-shop-results.json"
+
+.EXAMPLE
+    # List the AppInspector property values assigned to a repo
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoList -RepoNWO "octofelickz/juice-shop"
 
 .NOTES
     Prerequisites:
@@ -58,23 +82,44 @@
     - CLI usage wiki: https://github.com/microsoft/ApplicationInspector/wiki/1.-CLI-Usage
 #>
 param(
-    [ValidateSet('OrgApply', 'OrgCleanup', 'RepoAssign')]
+    [ValidateSet('OrgApply', 'OrgCleanup', 'OrgList', 'RepoAssign', 'RepoList')]
     [string]$Mode = 'OrgApply',
 
+    # ----- Org-level parameters -----
+    # GitHub organization name (e.g., "octofelickz")
+    [string]$Org,
+
     # ----- RepoAssign mode parameters -----
+    # Repository name (e.g., "juice-shop"). Used with -Org to form owner/repo.
+    [string]$Repo,
+
     # Target repo in name-with-owner format (e.g., "octofelickz/juice-shop")
+    # Alternative to -Org/-Repo
     [string]$RepoNWO,
 
     # Path to an AppInspector analyze JSON output file.
-    # Generate with: appinspector analyze -s <source> -f json -o results.json --no-show-progress -g "**/node_modules/**"
+    # See recommended analyze command in the RepoAssign section of this script.
+    # Quick start: appinspector analyze --source-path <source> --output-file-format json --output-file-path results.json --no-show-progress --tags-only --no-file-metadata --context-lines -1 --disable-archive-crawling --file-timeout 15000 --confidence-filters "High" --exclusion-globs "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/*.min.js"
     # See: https://github.com/microsoft/ApplicationInspector/wiki/1.-CLI-Usage
     [string]$AnalyzeOutput
 )
 
-$org = 'octofelickz'
+# Resolve RepoNWO: from -RepoNWO directly, or combine -Org/-Repo
+if (-not $RepoNWO -and $Org -and $Repo) {
+    $RepoNWO = "$Org/$Repo"
+}
+
+# Resolve Org: from -Org param, or infer from -RepoNWO
+if (-not $Org -and $RepoNWO) {
+    $Org = $RepoNWO.Split('/')[0]
+}
+if (-not $Org) {
+    Write-Error "Organization is required. Provide -Org, -RepoNWO, or -Org/-Repo."
+    return
+}
+
 $prefix = 'AppInspector'
-# Surrogate pair encoding for supplementary Unicode emoji (outside BMP)
-$descriptionPrefix = "`u{1FA9F}Microsoft`u{1F5A5}Application`u{1F575}Inspector"
+$descriptionPrefix = '🪟Microsoft🖥️Application🕵️Inspector'
 
 # ============================================================
 # Functions
@@ -268,10 +313,10 @@ function Set-RepoProperties {
 # OrgCleanup Mode
 # ============================================================
 if ($Mode -eq 'OrgCleanup') {
-    Remove-OrgAppInspectorProperties -Organization $org -Prefix $prefix
+    Remove-OrgAppInspectorProperties -Organization $Org -Prefix $prefix
 
     Write-Host "`n=== Remaining Org Properties ===" -ForegroundColor Magenta
-    $remaining = Get-OrgProperties -Organization $org
+    $remaining = Get-OrgProperties -Organization $Org
     if ($remaining) {
         $remaining | ForEach-Object { Write-Host "  $($_.property_name) ($($_.value_type))" }
     } else {
@@ -281,13 +326,133 @@ if ($Mode -eq 'OrgCleanup') {
 }
 
 # ============================================================
+# OrgList Mode
+# ============================================================
+if ($Mode -eq 'OrgList') {
+    Write-Host "`n=== AppInspector Org Properties for '$Org' ===" -ForegroundColor Green
+    $allProps = Get-OrgProperties -Organization $Org
+    $aiProps = $allProps | Where-Object { $_.property_name -like "$prefix-*" }
+
+    if (-not $aiProps) {
+        Write-Host "  No $prefix-* properties found." -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host "  Found $($aiProps.Count) properties:`n" -ForegroundColor Cyan
+    foreach ($prop in $aiProps) {
+        $valCount = if ($prop.allowed_values) { $prop.allowed_values.Count } else { 0 }
+        Write-Host "  $($prop.property_name) ($($prop.value_type), $valCount values)" -ForegroundColor White
+        if ($prop.description) {
+            Write-Host "    Description: $($prop.description)" -ForegroundColor DarkGray
+        }
+        if ($prop.allowed_values -and $prop.allowed_values.Count -gt 0) {
+            foreach ($val in $prop.allowed_values) {
+                Write-Host "      $val" -ForegroundColor DarkGray
+            }
+        }
+    }
+    return
+}
+
+# ============================================================
+# RepoList Mode
+# ============================================================
+if ($Mode -eq 'RepoList') {
+    if (-not $RepoNWO) {
+        Write-Error "RepoList mode requires -RepoNWO or -Org/-Repo parameter."
+        return
+    }
+
+    Write-Host "`n=== AppInspector Properties for '$RepoNWO' ===" -ForegroundColor Green
+    $repoProps = gh api "/repos/$RepoNWO/properties/values" | ConvertFrom-Json
+    $aiRepoProps = $repoProps | Where-Object { $_.property_name -like "$prefix-*" }
+
+    if (-not $aiRepoProps) {
+        Write-Host "  No $prefix-* values assigned." -ForegroundColor DarkGray
+        return
+    }
+
+    $totalValues = 0
+    foreach ($prop in $aiRepoProps) {
+        $values = @($prop.value)
+        if ($values.Count -eq 0 -or ($values.Count -eq 1 -and [string]::IsNullOrEmpty($values[0]))) {
+            continue
+        }
+        $totalValues += $values.Count
+        Write-Host "  $($prop.property_name) ($($values.Count) values):" -ForegroundColor White
+        foreach ($val in $values) {
+            Write-Host "    $val" -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host "`n  Total: $totalValues tag values assigned" -ForegroundColor Cyan
+    return
+}
+
+# ============================================================
 # RepoAssign Mode
 # ============================================================
-# Analyzes a repo's source code (or uses existing output), maps detected tags
-# to consolidated property names, and assigns them as repo custom property values.
+# Maps detected tags from an AppInspector analyze JSON output to consolidated
+# property names and assigns them as repo custom property values.
 #
-# Usage:
-#   appinspector analyze -s "C:\repos\octofelickz\juice-shop-felickz" -f json -o .\juice-shop-results.json --no-show-progress -g "**/node_modules/**"
+# ---- Recommended appinspector analyze command for org-wide scanning ----
+#
+# Optimized for accuracy + speed at scale (100k+ repos):
+#
+#   appinspector analyze `
+#     --source-path "<source-path>" `
+#     --output-file-format json `
+#     --output-file-path "<output>.json" `
+#     --no-show-progress `
+#     --tags-only `
+#     --no-file-metadata `
+#     --context-lines -1 `
+#     --disable-archive-crawling `
+#     --exclusion-globs "**/node_modules/**,**/vendor/**,**/bower_components/**,**/.bundle/**,**/packages/**,**/*.min.js,**/*.min.css,**/dist/**,**/build/**,**/out/**,**/target/**,**/bin/**,**/obj/**,**/.vs/**,**/.git/**" `
+#     --file-timeout 15000 `
+#     --confidence-filters "High" `
+#     --console-verbosity Verbose
+#
+# Flag breakdown:
+#   --output-file-format json    JSON output for programmatic consumption
+#   --no-show-progress           Suppress progress bar (CI/automation friendly)
+#   --tags-only                  Skip detailed match data — we only need tag names, not file/line/excerpt info.
+#                                  Massive speedup: skips excerpt extraction and per-match metadata.
+#   --no-file-metadata           Skip per-file metadata collection. We don't need file-level stats.
+#   --context-lines -1           Don't extract code samples or excerpts. Combined with --tags-only for max speed.
+#   --disable-archive-crawling   Don't unpack .zip/.jar/.nupkg etc. Huge time saver on large repos.
+#                                  Archive contents are typically 3rd-party dependencies anyway.
+#   --exclusion-globs            Exclude resolved dependency dirs and generated/minified code:
+#                                  **/node_modules/**     - npm/yarn resolved deps (can be 100k+ files)
+#                                  **/vendor/**           - PHP Composer, Go vendor, Ruby bundler
+#                                  **/bower_components/** - Bower (legacy)
+#                                  **/.bundle/**          - Ruby Bundler
+#                                  **/packages/**         - NuGet packages folder
+#                                  **/*.min.js            - Minified JS (source already scanned)
+#                                  **/*.min.css           - Minified CSS
+#                                  **/dist/**             - Build output directories
+#                                  **/build/**            - Build output directories
+#                                  **/out/**              - Build output directories
+#                                  **/target/**           - Maven/Gradle build output
+#                                  **/bin/**              - .NET/compiled output (default)
+#                                  **/obj/**              - .NET intermediate output (default)
+#                                  **/.vs/**              - Visual Studio cache (default)
+#                                  **/.git/**             - Git internal (default)
+#   --file-timeout 15000        15s per-file timeout (default is 60s). Prevents hanging on huge generated files.
+#                                  Most source files process in <1s. 15s is generous for legitimate code.
+#   --confidence-filters "High"  High confidence only. Reduces noise from low/medium confidence matches.
+#                                  For property tagging we want precision over recall.
+#   --console-verbosity Verbose  Maximum detail in console output. Shows all processing info,
+#                                  file-level progress, and rule matching details.
+#
+# Optional additional flags (not included by default):
+#   --processing-timeout 300000         5min total processing timeout. Use for CI time-boxing.
+#   --enumeration-timeout 60000         1min enumeration timeout. Prevents hanging on huge directory trees.
+#   --non-backtracking-regex            Slightly faster but may miss some patterns.
+#   --max-num-matches-per-tag 1         Max 1 match per tag. Faster but may miss nuanced tag detection.
+#
+# Example:
+#   appinspector analyze --source-path "C:\repos\octofelickz\juice-shop-felickz" --output-file-format json --output-file-path .\juice-shop-results.json --no-show-progress --tags-only --no-file-metadata --context-lines -1 --disable-archive-crawling --exclusion-globs "**/node_modules/**,**/vendor/**,**/bower_components/**,**/.bundle/**,**/packages/**,**/*.min.js,**/*.min.css,**/dist/**,**/build/**,**/out/**,**/target/**,**/bin/**,**/obj/**,**/.vs/**,**/.git/**" --file-timeout 15000 --confidence-filters "High" --console-verbosity Verbose
 #   .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -RepoNWO "octofelickz/juice-shop" -AnalyzeOutput ".\juice-shop-results.json"
 #
 # See: https://github.com/microsoft/ApplicationInspector/wiki/1.-CLI-Usage
@@ -298,7 +463,7 @@ if ($Mode -eq 'RepoAssign') {
     }
 
     if (-not $AnalyzeOutput) {
-        Write-Error "RepoAssign mode requires -AnalyzeOutput parameter. Generate with: appinspector analyze -s <source> -f json -o results.json --no-show-progress -g '**/node_modules/**'"
+        Write-Error "RepoAssign mode requires -AnalyzeOutput parameter. Generate with: appinspector analyze --source-path <source> --output-file-format json --output-file-path results.json --no-show-progress --tags-only --disable-archive-crawling --exclusion-globs '**/node_modules/**'"
         return
     }
 
@@ -440,6 +605,10 @@ foreach ($entry in $consolidatedGroups.GetEnumerator()) {
     # GitHub custom properties have a max of 200 allowed values
     if ($allowedValues.Count -gt 200) {
         Write-Warning "Property '$propertyName' has $($allowedValues.Count) values - truncating to 200"
+        Write-Error ("Property '$propertyName' exceeds the 200 allowed_values limit ($($allowedValues.Count) values). " +
+            "The merge table in this script needs to be updated to split this group into smaller sub-groups. " +
+            "See `$mergeTable and Get-TagPropertyName. " +
+            "Please report this issue to the script maintainer: https://github.com/felickz/scripts/issues")
         $allowedValues = $allowedValues | Select-Object -First 200
     }
 
@@ -464,7 +633,7 @@ Write-Host "`nTotal properties to create: $($propertyDefinitions.Count)" -Foregr
 
 # 5. Show current state and apply
 Write-Host "`n=== Current Org Properties ===" -ForegroundColor Magenta
-$currentProps = Get-OrgProperties -Organization $org
+$currentProps = Get-OrgProperties -Organization $Org
 if ($currentProps) {
     $currentProps | ForEach-Object { Write-Host "  $($_.property_name) ($($_.value_type))" }
 } else {
@@ -472,10 +641,10 @@ if ($currentProps) {
 }
 
 Write-Host "`n=== Applying Properties ===" -ForegroundColor Magenta
-Set-OrgProperties -Organization $org -Properties $propertyDefinitions
+Set-OrgProperties -Organization $Org -Properties $propertyDefinitions
 
 Write-Host "`n=== Updated Org Properties ===" -ForegroundColor Magenta
-$updatedProps = Get-OrgProperties -Organization $org
+$updatedProps = Get-OrgProperties -Organization $Org
 if ($updatedProps) {
     $updatedProps | ForEach-Object {
         $valCount = if ($_.allowed_values) { $_.allowed_values.Count } else { 0 }
