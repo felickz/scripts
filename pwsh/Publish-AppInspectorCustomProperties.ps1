@@ -57,15 +57,15 @@
     # Step 1: Run appinspector analyze (see RepoAssign section in script for full recommended flags)
     #   appinspector analyze --source-path "C:\repos\octofelickz\juice-shop-felickz" --output-file-format json --output-file-path .\juice-shop-results.json --no-show-progress --tags-only --no-file-metadata --context-lines -1 --disable-archive-crawling --exclusion-globs "**/node_modules/**,**/vendor/**,**/dist/**,**/build/**,**/*.min.js" --file-timeout 15000 --confidence-filters "High"
     # Step 2: Assign the results to the repo (using -RepoNWO)
-    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -RepoNWO "octofelickz/juice-shop" -AnalyzeOutput ".\juice-shop-results.json"
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -RepoNWO "octofelickz/juice-shop-felickz" -AnalyzeOutput ".\juice-shop-results.json"
 
 .EXAMPLE
     # Same as above but using -Org and -Repo instead of -RepoNWO
-    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -Org "octofelickz" -Repo "juice-shop" -AnalyzeOutput ".\juice-shop-results.json"
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -Org "octofelickz" -Repo "juice-shop-felickz" -AnalyzeOutput ".\juice-shop-results.json"
 
 .EXAMPLE
     # List the AppInspector property values assigned to a repo
-    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoList -RepoNWO "octofelickz/juice-shop"
+    .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoList -RepoNWO "octofelickz/juice-shop-felickz"
 
 .NOTES
     Prerequisites:
@@ -453,12 +453,12 @@ if ($Mode -eq 'RepoList') {
 #
 # Example:
 #   appinspector analyze --source-path "C:\repos\octofelickz\juice-shop-felickz" --output-file-format json --output-file-path .\juice-shop-results.json --no-show-progress --tags-only --no-file-metadata --context-lines -1 --disable-archive-crawling --exclusion-globs "**/node_modules/**,**/vendor/**,**/bower_components/**,**/.bundle/**,**/packages/**,**/*.min.js,**/*.min.css,**/dist/**,**/build/**,**/out/**,**/target/**,**/bin/**,**/obj/**,**/.vs/**,**/.git/**" --file-timeout 15000 --confidence-filters "High" --console-verbosity Verbose
-#   .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -RepoNWO "octofelickz/juice-shop" -AnalyzeOutput ".\juice-shop-results.json"
+#   .\Publish-AppInspectorCustomProperties.ps1 -Mode RepoAssign -RepoNWO "octofelickz/juice-shop-felickz" -AnalyzeOutput ".\juice-shop-results.json"
 #
 # See: https://github.com/microsoft/ApplicationInspector/wiki/1.-CLI-Usage
 if ($Mode -eq 'RepoAssign') {
     if (-not $RepoNWO) {
-        Write-Error "RepoAssign mode requires -RepoNWO parameter (e.g., -RepoNWO 'octofelickz/juice-shop')"
+        Write-Error "RepoAssign mode requires -RepoNWO parameter (e.g., -RepoNWO 'octofelickz/juice-shop-felickz')"
         return
     }
 
