@@ -1,14 +1,21 @@
 # Parameters
 param(
-    [switch]$SkipPost = $false
+    [switch]$SkipPost = $false,
+    [string]$ChangeLog = "",
+    [string]$ChangeLogFile = ""
 )
 
 # Track errors globally
 $script:hasErrors = $false
 
+# If ChangeLogFile is specified, read the changelog from that file
+if ($ChangeLogFile -and (Test-Path $ChangeLogFile)) {
+    $ChangeLog = Get-Content -Path $ChangeLogFile -Raw
+}
+
 # Install the PowerShell-yaml module if not already installed
 if (-not (Get-Module -Name PowerShell-yaml -ListAvailable)) {
-    Install-Module -Name PowerShell-yaml -Scope CurrentUser
+    Install-Module -Name PowerShell-yaml -Scope CurrentUser -Force
 }
 
 # GitHub - Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml
@@ -264,6 +271,16 @@ $($GHESInventory | ForEach-Object { "| [$($_.GHESVersion)](https://docs.github.c
 | Copilot Secret Scanning Patterns | 0 |
 | Inventory Commit History | [Docs](https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/provider-table.md) [Docs NonPartner](https://raw.githubusercontent.com/MicrosoftDocs/azure-devops-docs/refs/heads/main/docs/repos/security/includes/non-provider-table.md)
 | Secret Scanning Changes | [Commits](https://github.com/MicrosoftDocs/azure-devops-docs/commits/main/docs/repos/security/includes/provider-table.md) [Commits Non-Partner](https://github.com/MicrosoftDocs/azure-devops-docs/commits/main/docs/repos/security/includes/non-provider-table.md)|
+$(if ($ChangeLog) {
+@"
+
+<details><summary>📋 Recent Changes</summary>
+
+$ChangeLog
+
+</details>
+"@
+})
 "@
 
 Write-Host $comment
