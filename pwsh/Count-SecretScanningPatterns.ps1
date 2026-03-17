@@ -12,6 +12,26 @@ if (-not (Get-Module -Name PowerShell-yaml -ListAvailable)) {
 }
 
 # GitHub - Read the YAML file from https://github.com/github/docs/blob/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml
+
+# Resolve Liquid ifversion templates to a boolean for a given platform (ghec, ghes, or fpt)
+function Resolve-LiquidBool {
+    param(
+        [object]$Value,
+        [string]$Platform  # 'ghec' or 'ghes'
+    )
+    if ($Value -is [bool]) { return $Value }
+    $s = "$Value".Trim()
+    # Pattern: {% ifversion <conditions> %}VALUE_IF{% else %}VALUE_ELSE{% endif %}
+    # Conditions can be: ghes, ghec, fpt, or combinations with "or" (e.g. "fpt or ghes")
+    if ($s -match '\{%\s*ifversion\s+(.+?)\s*%\}(\w+)\{%\s*else\s*%\}(\w+)\{%\s*endif\s*%\}') {
+        $conditions = $matches[1] -split '\s+or\s+' | ForEach-Object { $_.Trim() }
+        $ifMatch = $Platform -in $conditions
+        $resolved = if ($ifMatch) { $matches[2] } else { $matches[3] }
+        return $resolved -eq 'true'
+    }
+    return $s -eq 'True' -or $s -eq 'true'
+}
+
 $url = 'https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml'
 try {
     $data = Invoke-RestMethod -Uri $url | ConvertFrom-Yaml
@@ -24,12 +44,13 @@ try {
 $inventory = @()
 foreach ($node in $data) {
     $inventory += New-Object PSObject -Property @{
-        'Provider'          = $node.provider
-        'SecretType'        = $node.secretType
-        'HasPushProtection' = $node.hasPushProtection
-        'HasValidityCheck'  = $node.hasValidityCheck.ToString() -ne 'False'
-        'HasVariants'       = $node.isduplicate
-        'Base64Supported'   = $node.base64Supported
+        'Provider'            = $node.provider
+        'SecretType'          = $node.secretType
+        'HasPushProtection'   = (Resolve-LiquidBool $node.hasPushProtection 'ghec')
+        'HasValidityCheck'    = (Resolve-LiquidBool $node.hasValidityCheck 'ghec')
+        'HasVariants'         = $node.isduplicate
+        'Base64Supported'     = (Resolve-LiquidBool $node.base64Supported 'ghec')
+        'HasExtendedMetadata' = (Resolve-LiquidBool $node.hasExtendedMetadata 'ghec')
     }
 }
 
@@ -39,6 +60,7 @@ $Push = $inventory | Where-Object { $_.HasPushProtection -eq $true }  | Measure-
 $Validity = $inventory | Where-Object { $_.HasValidityCheck -eq $true }  | Measure-Object | Select-Object -Property Count
 $Variants = $inventory | Where-Object { $_.HasVariants -eq $true }  | Measure-Object | Select-Object -Property Count
 $Base64Supported = $inventory | Where-Object { $_.Base64Supported -eq $true }  | Measure-Object | Select-Object -Property Count
+$ExtendedMetadata = $inventory | Where-Object { $_.HasExtendedMetadata -eq $true }  | Measure-Object | Select-Object -Property Count
 
 # Get GHES versions from the pattern-docs folder structure
 $GHESInventory = @()
@@ -50,11 +72,17 @@ try {
         $ghesUrl = "https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghes-$ghesVer/public-docs.yml"
         try {
             $ghesData = Invoke-RestMethod -Uri $ghesUrl | ConvertFrom-Yaml
-            $ghesValidityCount = ($ghesData | Where-Object { $_.hasValidityCheck -eq $true } | Measure-Object).Count
+            $ghesValidityCount = ($ghesData | Where-Object { Resolve-LiquidBool $_.hasValidityCheck 'ghes' } | Measure-Object).Count
+            $ghesPushCount = ($ghesData | Where-Object { Resolve-LiquidBool $_.hasPushProtection 'ghes' } | Measure-Object).Count
+            $ghesBase64Count = ($ghesData | Where-Object { Resolve-LiquidBool $_.base64Supported 'ghes' } | Measure-Object).Count
+            $ghesExtendedMetadataCount = ($ghesData | Where-Object { Resolve-LiquidBool $_.hasExtendedMetadata 'ghes' } | Measure-Object).Count
             $GHESInventory += New-Object PSObject -Property @{
-                'GHESVersion'        = $ghesVer
-                'Count'              = $ghesData.Count
-                'ValidityCheckCount' = $ghesValidityCount
+                'GHESVersion'            = $ghesVer
+                'Count'                  = $ghesData.Count
+                'ValidityCheckCount'     = $ghesValidityCount
+                'PushProtectionCount'    = $ghesPushCount
+                'Base64Count'            = $ghesBase64Count
+                'ExtendedMetadataCount'  = $ghesExtendedMetadataCount
             }
         } catch {
             Write-Warning "Failed to fetch GHES $ghesVer data: $_"
@@ -203,13 +231,14 @@ $GHCopilotCount = ($GHCopilotPatterns | Select-Object -Unique).Count
 $comment = @"
 # GitHub
 
-| Secret Protection Inventory |$($(Get-Date -AsUTC).ToString('u')) |
+| [Secret Protection Inventory](https://docs.github.com/en/enterprise-cloud@latest/code-security/reference/secret-security/supported-secret-scanning-patterns) |$($(Get-Date -AsUTC).ToString('u')) |
 | --- | --- |
 | Number of Partner Secret Types | $($inventory.Count) ($($Variants.Count) with variants) |
 | Number of Unique Partner Providers | $($Providers.Count) |
 | Number of Secret Types with Push Protection | $($Push.Count) |
 | Number of Secret Types with Validity Check | $($Validity.Count) |
 | Number of Secret Types with Base64 Support | $($Base64Supported.Count) |
+| Number of Secret Types with Extended Metadata | $($ExtendedMetadata.Count) |
 | Non-Partner Patterns | [$($GHNonProviderCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/secret-scanning-patterns#non-provider-patterns) (0 with validity checks) |
 | Copilot Secret Scanning Patterns | [$($GHCopilotCount)](https://docs.github.com/en/enterprise-cloud@latest/code-security/secret-scanning/introduction/supported-secret-scanning-patterns#copilot-secret-scanning) |
 | Inventory Commit History | [Docs](https://github.com/github/docs/blob/main/src/secret-scanning/data/pattern-docs/ghec/public-docs.yml)
@@ -218,9 +247,9 @@ $comment = @"
 <details><summary>GHES Versions / Count</summary>
 <p>
 
-| GHES Version | Count | Validity Check Count |
-| --- | --- | --- |
-$($GHESInventory | ForEach-Object { "| $($_.GHESVersion) | $($_.Count) | $($_.ValidityCheckCount) |" } | Out-String)
+| GHES Version | Count | Push Protection | Validity Check | Base64 | Extended Metadata |
+| --- | --- | --- | --- | --- | --- |
+$($GHESInventory | ForEach-Object { "| [$($_.GHESVersion)](https://docs.github.com/en/enterprise-server@$($_.GHESVersion)/code-security/reference/secret-security/supported-secret-scanning-patterns) | $($_.Count) | $($_.PushProtectionCount) | $($_.ValidityCheckCount) | $($_.Base64Count) | $($_.ExtendedMetadataCount) |" } | Out-String)
 
 </p>
 </details>
