@@ -70,10 +70,14 @@ $Base64Supported = $inventory | Where-Object { $_.Base64Supported -eq $true }  |
 $ExtendedMetadata = $inventory | Where-Object { $_.HasExtendedMetadata -eq $true }  | Measure-Object | Select-Object -Property Count
 
 # Get GHES versions from the pattern-docs folder structure
+# Note: Uses Invoke-RestMethod instead of gh api to avoid dependency on GH_TOKEN scope.
+# When GH_TOKEN is set to a PAT with only 'gist' scope (e.g., in CI), gh api calls to
+# /repos/:owner/:repo/contents/ fail silently. Invoke-RestMethod works without auth for public repos.
 $GHESInventory = @()
 try {
-    $ghesVersionsResponse = gh api /repos/github/docs/contents/src/secret-scanning/data/pattern-docs --jq '.[].name' 2>&1
-    $ghesVersions = $ghesVersionsResponse | Where-Object { $_ -match '^ghes-\d+\.\d+$' } | ForEach-Object { $_ -replace 'ghes-', '' } | Sort-Object { [version]$_ }
+    $ghesContentsUrl = 'https://api.github.com/repos/github/docs/contents/src/secret-scanning/data/pattern-docs'
+    $ghesContents = Invoke-RestMethod -Uri $ghesContentsUrl -Headers @{ 'User-Agent' = 'Count-SecretScanningPatterns' }
+    $ghesVersions = $ghesContents | Where-Object { $_.name -match '^ghes-\d+\.\d+$' } | ForEach-Object { $_.name -replace 'ghes-', '' } | Sort-Object { [version]$_ }
 
     foreach ($ghesVer in $ghesVersions) {
         $ghesUrl = "https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghes-$ghesVer/public-docs.yml"
