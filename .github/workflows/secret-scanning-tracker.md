@@ -21,6 +21,39 @@ safe-outputs:
 steps:
   - name: Install PowerShell-yaml module
     run: pwsh -c "Install-Module -Name PowerShell-yaml -Scope CurrentUser -Force -AcceptLicense 2>/dev/null"
+post-steps:
+  # post-steps run OUTSIDE the agent sandbox (AWF container) after the agent
+  # completes. This is the ONLY way to use repository secrets (like GIST_PAT)
+  # because strict mode prevents passing secrets into the sandboxed agent
+  # container to protect against AI-driven secret exfiltration.
+  #
+  # The agent writes /tmp/gh-aw/changelog.md and /tmp/gh-aw/run-counter as
+  # signal files. These post-steps detect those files and execute the
+  # PowerShell script with the GIST_PAT secret available as GH_TOKEN.
+  - name: Run Secret Scanning Pattern Counter
+    if: ${{ hashFiles('/tmp/gh-aw/changelog.md') != '' }}
+    run: |
+      pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1 -ChangeLogFile /tmp/gh-aw/changelog.md
+      if ($LASTEXITCODE -ne 0) {
+        echo "## ❌ Secret Scanning Pattern Counter Failed" >> "$GITHUB_STEP_SUMMARY"
+        echo "The gist comment was NOT posted. Check the logs above for details." >> "$GITHUB_STEP_SUMMARY"
+        exit 1
+      }
+      echo "## ✅ Gist comment posted successfully" >> "$GITHUB_STEP_SUMMARY"
+    env:
+      GH_TOKEN: ${{ secrets.GIST_PAT }}
+  - name: Run Secret Scanning Pattern Counter (no changelog)
+    if: ${{ hashFiles('/tmp/gh-aw/changelog.md') == '' && hashFiles('/tmp/gh-aw/run-counter') != '' }}
+    run: |
+      pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1
+      if ($LASTEXITCODE -ne 0) {
+        echo "## ❌ Secret Scanning Pattern Counter Failed" >> "$GITHUB_STEP_SUMMARY"
+        echo "The gist comment was NOT posted. Check the logs above for details." >> "$GITHUB_STEP_SUMMARY"
+        exit 1
+      }
+      echo "## ✅ Gist comment posted successfully" >> "$GITHUB_STEP_SUMMARY"
+    env:
+      GH_TOKEN: ${{ secrets.GIST_PAT }}
 ---
 
 # Secret Scanning Pattern Tracker
@@ -115,32 +148,33 @@ Produce a Markdown changelog. Example:
 - No changes detected
 ```
 
-### Step 5: Run the Counting Script
+### Step 5: Signal the Post-Step to Run the Counting Script
 
-1. Write the changelog markdown from Step 4 to a temporary file:
+The actual PowerShell script execution happens in a `post-step` that runs
+**outside** the agent sandbox (where it has access to the `GIST_PAT` secret).
+Your job is to write the changelog and create a signal file.
+
+1. Write the changelog markdown from Step 4 to `/tmp/gh-aw/changelog.md`:
 
 ```bash
-cat > /tmp/changelog.md << 'CHANGELOG_EOF'
+cat > /tmp/gh-aw/changelog.md << 'CHANGELOG_EOF'
 <paste the changelog markdown here>
 CHANGELOG_EOF
 ```
 
-2. Execute the PowerShell counting script. **CRITICAL**: You must set `GH_TOKEN` to the `GIST_PAT` secret so the `gh` CLI can authenticate with the gist API. The secret is available in the sandbox environment as `GIST_PAT`. Run:
+2. Create a signal file so the post-step knows to run:
 
 ```bash
-export GH_TOKEN="$GIST_PAT"
-pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1 -ChangeLogFile /tmp/changelog.md
+touch /tmp/gh-aw/run-counter
 ```
 
-The script will automatically:
-- Fetch the latest pattern data from all documentation sources.
-- Count patterns, providers, push protection, validity checks, etc.
-- Post a comment to the tracking gist at
-  `https://gist.github.com/felickz/9688dd0f5182cab22386efecfa41eb74` that
-  includes the updated counts **and** the changelog in a collapsed section.
+The `post-steps` in the workflow frontmatter will automatically:
+- Detect the signal file and changelog.
+- Run `Count-SecretScanningPatterns.ps1` with the changelog.
+- Post a comment to the tracking gist using the `GIST_PAT` secret.
 
-If the script exits with a non-zero code, capture `stderr` and report the error
-in the workflow summary but **still proceed** to update the cache.
+**Do NOT run the PowerShell script yourself** — you do not have the gist
+authentication token inside the sandbox.
 
 ### Step 6: Write the Workflow Summary
 

@@ -293,4 +293,8 @@ if (-not $SkipPost) {
         exit 1
     }
     gh api /gists/9688dd0f5182cab22386efecfa41eb74/comments -f "body=$comment"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to post gist comment (exit code: $LASTEXITCODE). Check that GH_TOKEN is set and has the 'gist' scope."
+        exit $LASTEXITCODE
+    }
 }
