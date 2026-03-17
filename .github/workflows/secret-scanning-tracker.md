@@ -30,27 +30,27 @@ post-steps:
   # The agent writes /tmp/gh-aw/changelog.md and /tmp/gh-aw/run-counter as
   # signal files. These post-steps detect those files and execute the
   # PowerShell script with the GIST_PAT secret available as GH_TOKEN.
+  #
+  # NOTE: hashFiles() only works with $GITHUB_WORKSPACE paths, so we use
+  # a single always-run step with inline file-existence checks instead.
   - name: Run Secret Scanning Pattern Counter
-    if: ${{ hashFiles('/tmp/gh-aw/changelog.md') != '' }}
     run: |
-      pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1 -ChangeLogFile /tmp/gh-aw/changelog.md
-      if ($LASTEXITCODE -ne 0) {
+      if [ -f /tmp/gh-aw/changelog.md ]; then
+        echo "Changelog found — running with changelog"
+        pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1 -ChangeLogFile /tmp/gh-aw/changelog.md
+      elif [ -f /tmp/gh-aw/run-counter ]; then
+        echo "Signal file found — running without changelog"
+        pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1
+      else
+        echo "No signal files found — agent did not request a gist update (noop)."
+        echo "## ⏸️ No gist update requested by agent" >> "$GITHUB_STEP_SUMMARY"
+        exit 0
+      fi
+      if [ $? -ne 0 ]; then
         echo "## ❌ Secret Scanning Pattern Counter Failed" >> "$GITHUB_STEP_SUMMARY"
         echo "The gist comment was NOT posted. Check the logs above for details." >> "$GITHUB_STEP_SUMMARY"
         exit 1
-      }
-      echo "## ✅ Gist comment posted successfully" >> "$GITHUB_STEP_SUMMARY"
-    env:
-      GH_TOKEN: ${{ secrets.GIST_PAT }}
-  - name: Run Secret Scanning Pattern Counter (no changelog)
-    if: ${{ hashFiles('/tmp/gh-aw/changelog.md') == '' && hashFiles('/tmp/gh-aw/run-counter') != '' }}
-    run: |
-      pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1
-      if ($LASTEXITCODE -ne 0) {
-        echo "## ❌ Secret Scanning Pattern Counter Failed" >> "$GITHUB_STEP_SUMMARY"
-        echo "The gist comment was NOT posted. Check the logs above for details." >> "$GITHUB_STEP_SUMMARY"
-        exit 1
-      }
+      fi
       echo "## ✅ Gist comment posted successfully" >> "$GITHUB_STEP_SUMMARY"
     env:
       GH_TOKEN: ${{ secrets.GIST_PAT }}
