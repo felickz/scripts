@@ -50,7 +50,7 @@ try {
         $ghesUrl = "https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghes-$ghesVer/public-docs.yml"
         try {
             $ghesData = Invoke-RestMethod -Uri $ghesUrl | ConvertFrom-Yaml
-            $ghesValidityCount = ($ghesData | Where-Object { $_.hasValidityCheck.ToString() -ne 'False' } | Measure-Object).Count
+            $ghesValidityCount = ($ghesData | Where-Object { $_.hasValidityCheck -eq $true } | Measure-Object).Count
             $GHESInventory += New-Object PSObject -Property @{
                 'GHESVersion'        = $ghesVer
                 'Count'              = $ghesData.Count
