@@ -21,6 +21,10 @@ safe-outputs:
 steps:
   - name: Install PowerShell-yaml module
     run: pwsh -c "Install-Module -Name PowerShell-yaml -Scope CurrentUser -Force -AcceptLicense 2>/dev/null"
+  - name: Set Gist Token
+    run: echo "GH_TOKEN=$GIST_PAT" >> "$GITHUB_ENV"
+    env:
+      GIST_PAT: ${{ secrets.GIST_PAT }}
 ---
 
 # Secret Scanning Pattern Tracker
@@ -125,7 +129,7 @@ cat > /tmp/changelog.md << 'CHANGELOG_EOF'
 CHANGELOG_EOF
 ```
 
-2. Execute the PowerShell counting script:
+2. Execute the PowerShell counting script. **IMPORTANT**: The `GH_TOKEN` environment variable is already set from the workflow steps to authenticate with the gist API. Do NOT override it.
 
 ```bash
 pwsh -File ./pwsh/Count-SecretScanningPatterns.ps1 -ChangeLogFile /tmp/changelog.md
