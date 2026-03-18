@@ -76,8 +76,10 @@ $ExtendedMetadata = $inventory | Where-Object { $_.HasExtendedMetadata -eq $true
 $GHESInventory = @()
 try {
     $ghesContentsUrl = 'https://api.github.com/repos/github/docs/contents/src/secret-scanning/data/pattern-docs'
+    Write-Host "Fetching GHES versions from: $ghesContentsUrl"
     $ghesContents = Invoke-RestMethod -Uri $ghesContentsUrl -Headers @{ 'User-Agent' = 'Count-SecretScanningPatterns' }
     $ghesVersions = $ghesContents | Where-Object { $_.name -match '^ghes-\d+\.\d+$' } | ForEach-Object { $_.name -replace 'ghes-', '' } | Sort-Object { [version]$_ }
+    Write-Host "Found $($ghesVersions.Count) GHES versions: $($ghesVersions -join ', ')"
 
     foreach ($ghesVer in $ghesVersions) {
         $ghesUrl = "https://raw.githubusercontent.com/github/docs/main/src/secret-scanning/data/pattern-docs/ghes-$ghesVer/public-docs.yml"
