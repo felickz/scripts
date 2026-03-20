@@ -148,6 +148,33 @@ Produce a Markdown changelog. Example:
 - No changes detected
 ```
 
+#### 4b. Check the GitHub Blog Changelog
+
+In addition to commit-level changes, check the GitHub blog for recent
+secret scanning rollup articles. These blog posts often summarize multiple
+changes (new patterns, features, partner announcements) and may lag behind
+the actual documentation updates by days or weeks.
+
+Fetch the application-security changelog page (last 3 months):
+
+```bash
+curl -s 'https://github.blog/changelog/?label=application-security&opened-months=3' > /tmp/gh-aw/blog-changelog.html
+```
+
+Parse the HTML to find article links and titles that mention "secret scanning"
+(case-insensitive). Look for `<a>` tags with `href` pointing to
+`https://github.blog/changelog/...` whose text contains "secret scanning" or
+"secret-scanning".
+
+If any relevant blog posts are found, append a section to the changelog:
+
+```markdown
+#### GitHub Blog — Secret Scanning Changelog
+- [Secret scanning updates — November 2025](https://github.blog/changelog/2025-12-02-secret-scanning-updates-november-2025/)
+```
+
+If no relevant posts are found, omit this section entirely.
+
 ### Step 5: Signal the Post-Step to Run the Counting Script
 
 The actual PowerShell script execution happens in a `post-step` that runs
