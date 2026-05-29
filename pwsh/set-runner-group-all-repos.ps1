@@ -1,3 +1,11 @@
+# gh auth login
+# #or ensure GH_TOKEN is already set with sufficient admin scope - gh auth refresh -h github.com -s admin:org
+
+#.\set-runner-group-all-repos.ps1 `
+#  -Enterprise "your-enterprise-slug" `
+#  -RunnerGroupName "Your Runner Group Name" `
+#  -WhatIf
+
 param(
     [Parameter(Mandatory = $true)]
     [string]$Enterprise,
